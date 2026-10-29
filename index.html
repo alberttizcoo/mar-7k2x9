@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carnet de Mar</title>
+<meta name="theme-color" content="#d9d2bd">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carnet de Mar">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+  :root {
+    --mesa: #d9d2bd;
+    --papel: #fff4ef;
+    --rosa: #ff8fab;
+    --tinta: #2a3a8c;      /* bolígrafo azul */
+    --lapiz: #4a4a4a;
+    --rojo: #d9482b;       /* lápiz rojo */
+    --marcador: #ffd84d;   /* subrayador */
+    --letra: "Bradley Hand", "Segoe Print", "Chalkboard SE", "Marker Felt", "Comic Sans MS", cursive;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--mesa);
+    background-image: repeating-linear-gradient(0deg, transparent 0 31px, rgba(74,74,74,.08) 31px 32px);
+    font-family: var(--letra);
+    color: var(--tinta);
+    display: grid; place-items: center;
+    overflow: hidden; user-select: none; -webkit-user-select: none;
+  }
+  .escena {
+    width: min(92vw, 540px, calc(78vh * 1.585));
+    aspect-ratio: 85.6 / 54;            /* tamaño real de un carnet (ID-1) */
+    perspective: 1200px;
+    touch-action: none;
+    cursor: pointer;
+    outline-offset: 14px;
+  }
+  .inclina { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; will-change: transform; }
+  .tarjeta {
+    position: relative; width: 100%; height: 100%; transform-style: preserve-3d;
+    transition: transform .8s cubic-bezier(.34, 1.3, .5, 1);   /* vuelta con un pequeño rebote */
+  }
+  /* Reflejo: brillo blanco + franja de colores que siguen al puntero */
+  .reflejo {
+    position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 5;
+    opacity: var(--go, 0);
+    background:
+      radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255,255,255,.6), rgba(255,255,255,0) 45%),
+      linear-gradient(115deg, transparent 30%, rgba(255,143,171,.28) 42%, rgba(255,216,77,.28) 50%, rgba(140,200,255,.3) 58%, transparent 70%);
+    background-size: 100% 100%, 260% 260%;
+    background-position: 0 0, var(--bp, 50%) 50%;
+  }
+  .cara {
+    position: absolute; inset: 0;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    container-type: size;               /* permite usar cqw: todo escala con la tarjeta */
+  }
+  .cara.dorso { transform: rotateY(180deg); }
+
+  /* El "dibujo": bordes torcidos + filtro de temblor de mano */
+  .dibujo {
+    position: absolute; inset: 0;
+    background: var(--papel);
+    background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgba(255,143,171,.16) 7px 8px);
+    border: .9cqw solid var(--tinta);
+    border-radius: 4cqw 3.4cqw 4.4cqw 3.2cqw / 3.4cqw 4.2cqw 3cqw 4cqw;
+    box-shadow: 1.6cqw 1.8cqw 0 rgba(42,58,140,.28);
+    padding: 3.2cqw 4cqw;
+    filter: url(#temblor);
+    display: flex; flex-direction: column; gap: 2.4cqw;
+  }
+  .dibujo::after {                       /* segundo trazo, como si hubiera repasado la línea */
+    content: ""; position: absolute; inset: 1.2cqw;
+    border: .35cqw solid var(--rojo); opacity: .55;
+    border-radius: 3.2cqw 4cqw 3cqw 4.2cqw / 4cqw 3cqw 4.2cqw 3.2cqw;
+    pointer-events: none;
+  }
+
+  /* FRENTE */
+  .cabecera { display: flex; align-items: center; gap: 2.4cqw; border-bottom: .6cqw solid var(--tinta); padding-bottom: 1.4cqw; }
+  .cabecera svg { width: 8.4cqw; height: 8.4cqw; flex: none; }
+  .cabecera h1 { font-size: 5cqw; line-height: 1; font-weight: 700; }
+  .cabecera span { margin-left: auto; font-size: 3.4cqw; color: var(--rojo); transform: rotate(-4deg); }
+  .cuerpo { display: flex; gap: 4cqw; flex: 1; min-height: 0; }
+  .foto {
+    width: 30cqw; aspect-ratio: 5 / 6; align-self: center; flex: none; border: .7cqw solid var(--rosa);
+    border-radius: 4cqw 3cqw 4.4cqw 3.2cqw;
+    overflow: hidden;
+    background: repeating-linear-gradient(45deg, transparent 0 5px, rgba(74,74,74,.16) 5px 6px);
+  }
+  .foto svg { width: 100%; height: 100%; display: block; }
+  .datos { flex: 1; display: grid; align-content: space-between; font-size: 3.7cqw; line-height: 1.15; }
+  .datos b { color: var(--rojo); font-weight: 700; margin-right: .8cqw; }
+  .datos .marca { background: linear-gradient(transparent 55%, #ffc2d1 55% 92%, transparent 92%); padding: 0 .8cqw; }
+  .fila { display: flex; gap: 3cqw; }
+
+  /* DORSO */
+  .dorso .dibujo { gap: 1.8cqw; }
+  .cat { display: flex; align-items: center; gap: 3cqw; font-size: 3.7cqw; }
+  .cat .letra { font-size: 9cqw; line-height: 1; width: 13cqw; height: 13cqw; display: grid; place-items: center;
+    border: .7cqw solid var(--rojo); border-radius: 50% 46% 52% 48%; color: var(--rojo); }
+  .cat svg { width: 30cqw; margin-left: auto; }
+  .obs { font-size: 3.7cqw; line-height: 1.2; }
+  .obs b { color: var(--rojo); margin-right: .8cqw; }
+  .pie { display: flex; align-items: flex-end; gap: 4cqw; margin-top: auto; }
+  .firma { flex: 1; border-bottom: .6cqw solid var(--lapiz); font-size: 3cqw; color: var(--lapiz); position: relative; padding-top: 9cqw; }
+  .firma svg { position: absolute; left: 2cqw; top: 0; width: 34cqw; height: 9cqw; overflow: visible; }
+  .holo { width: 15cqw; height: 15cqw; flex: none; }
+
+  /* REGALO: la tarjeta empieza envuelta en papel con lazo */
+  .regalo { position: absolute; inset: 0; container-type: size; transform: translateZ(25px); z-index: 10; }
+  .regalo.abierto { pointer-events: none; }
+  .sombra { position: absolute; inset: 0; border-radius: 4cqw 3.4cqw 4.4cqw 3.2cqw / 3.4cqw 4.2cqw 3cqw 4cqw; box-shadow: 1.6cqw 1.8cqw 0 rgba(42,58,140,.28); }
+  .regalo.abierto .sombra { animation: sinsombra .5s ease forwards; }
+  @keyframes sinsombra { to { opacity: 0; } }
+  .wrap { position: absolute; inset: 0; filter: url(#temblor); }
+  .regalo.abierto .wrap {   /* al rasgarse, los bordes rotos se dibujan con trazo */
+    filter: drop-shadow(.35cqw 0 0 var(--tinta)) drop-shadow(-.35cqw 0 0 var(--tinta))
+            drop-shadow(0 .35cqw 0 var(--tinta)) drop-shadow(0 -.35cqw 0 var(--tinta)) url(#temblor);
+  }
+  .regalo.abierto .entero { display: none; }
+  .trozo {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle, rgba(255,255,255,.9) 1.3cqw, transparent 1.4cqw) 0 0 / 10cqw 10cqw,
+      radial-gradient(circle, rgba(42,58,140,.4) .6cqw, transparent .7cqw) 5cqw 5cqw / 10cqw 10cqw,
+      #ffc2d4;
+    background-origin: border-box;
+    border: .6cqw solid var(--tinta);
+    border-radius: 4cqw 3.4cqw 4.4cqw 3.2cqw / 3.4cqw 4.2cqw 3cqw 4cqw;
+  }
+  .trozo::before, .trozo::after { content: ""; position: absolute; background: #4a5fd8; }
+  .trozo::before { left: 0; right: 0; top: calc(50% - 6.5cqw); height: 13cqw; border-top: .5cqw solid var(--tinta); border-bottom: .5cqw solid var(--tinta); }
+  .trozo::after { top: 0; bottom: 0; left: calc(50% - 3.5cqw); width: 7cqw; border-left: .5cqw solid var(--tinta); border-right: .5cqw solid var(--tinta); }
+  /* líneas de rasgado en zigzag */
+  .tA .trozo { clip-path: polygon(0% 0%, 58% 0%, 54% 9%, 60% 17%, 52% 27%, 57% 36%, 49% 46%, 54% 55%, 46% 64%, 51% 73%, 43% 82%, 47% 91%, 42% 100%, 38% 86%, 34% 88%, 26% 76%, 22% 80%, 14% 70%, 9% 74%, 0% 68%); }
+  .tB .trozo { clip-path: polygon(58% 0%, 54% 9%, 60% 17%, 52% 27%, 57% 36%, 49% 46%, 54% 55%, 62% 50%, 70% 57%, 78% 49%, 86% 56%, 93% 50%, 100% 52%, 100% 0%); }
+  .tC .trozo { clip-path: polygon(54% 55%, 62% 50%, 70% 57%, 78% 49%, 86% 56%, 93% 50%, 100% 52%, 100% 100%, 42% 100%, 47% 91%, 43% 82%, 51% 73%, 46% 64%); }
+  .tD .trozo { clip-path: polygon(0% 68%, 9% 74%, 14% 70%, 22% 80%, 26% 76%, 34% 88%, 38% 86%, 42% 100%, 0% 100%); }
+  /* primero tiran (tensión) y luego el trozo sale volando */
+  .regalo.abierto .tA { animation: rasgaA 1.2s ease-in forwards; }
+  .regalo.abierto .tB { animation: rasgaB 1.2s ease-in forwards; }
+  .regalo.abierto .tC { animation: rasgaC 1.2s ease-in forwards; }
+  .regalo.abierto .tD { animation: rasgaD 1.2s ease-in forwards; }
+  @keyframes rasgaA { 16% { transform: translate(-2.5%,-.5%) rotate(-2deg) } 30% { transform: translate(-2%,0) rotate(-1.5deg) } 65% { opacity: 1 } 100% { transform: translate(-62%,-12%) rotate(-30deg); opacity: 0 } }
+  @keyframes rasgaB { 16% { transform: translate(1.5%,-3%) rotate(2deg) } 30% { transform: translate(1.2%,-2.4%) rotate(1.5deg) } 65% { opacity: 1 } 100% { transform: translate(34%,-75%) rotate(18deg); opacity: 0 } }
+  @keyframes rasgaC { 16% { transform: translate(2.5%,2%) rotate(2deg) } 30% { transform: translate(2%,1.6%) rotate(1.5deg) } 65% { opacity: 1 } 100% { transform: translate(56%,46%) rotate(24deg); opacity: 0 } }
+  @keyframes rasgaD { 16% { transform: translate(-3%,2.5%) rotate(-3deg) } 30% { transform: translate(-2.4%,2%) rotate(-2.4deg) } 65% { opacity: 1 } 100% { transform: translate(-34%,70%) rotate(-34deg); opacity: 0 } }
+  .lazo {
+    position: absolute; left: 50%; top: 50%; width: 36cqw; z-index: 2;
+    transform: translate(-50%, -50%); filter: url(#temblor);
+    transition: transform .6s cubic-bezier(.3, 1.6, .5, 1), opacity .4s ease .15s;
+  }
+  .lazo svg { display: block; width: 100%; transform-origin: 50% 60%; animation: balanceo 2.6s ease-in-out infinite; }
+  @keyframes balanceo { 0%, 55%, 100% { transform: rotate(0) } 65% { transform: rotate(-6deg) } 75% { transform: rotate(5deg) } 85% { transform: rotate(-3deg) } }
+  .regalo.abierto .lazo { transform: translate(-50%, -95%) scale(1.5) rotate(18deg); opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .lazo svg { animation: none; } }
+
+  .ayuda { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0; text-align: center; font-size: 1rem; color: var(--lapiz); opacity: .8; }
+</style>
+</head>
+<body>
+  <!-- Filtro que deforma ligeramente los trazos para que parezcan hechos a mano -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="temblor" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4" result="r"/>
+      <feDisplacementMap in="SourceGraphic" in2="r" scale="3.2"/>
+    </filter>
+  </svg>
+
+  <div class="escena" id="escena" tabindex="0" aria-label="Carnet de conducir dibujado a mano. Arrastra para inclinarlo, haz clic o pulsa Intro para darle la vuelta.">
+    <div class="inclina" id="inclina">
+    <div class="tarjeta" id="tarjeta">
+
+      <div class="cara frente">
+        <div class="dibujo">
+          <div class="cabecera">
+            <svg viewBox="-20 -20 40 40" id="estrellas" fill="none" stroke="var(--tinta)" stroke-width="1.4" stroke-linecap="round">
+              <text x="0" y="5" text-anchor="middle" font-size="14" font-family="var(--letra)" fill="var(--tinta)" stroke="none">E</text>
+            </svg>
+            <h1>Permiso de conducción</h1>
+            <span>¡con cariño! ♡</span>
+          </div>
+          <div class="cuerpo">
+            <div class="foto">
+              <svg viewBox="0 0 100 120" preserveAspectRatio="xMidYMid slice" fill="none" stroke="var(--tinta)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <!-- cielo pastel, nubes y arco -->
+                <rect width="100" height="120" fill="#cfe6f7" fill-opacity=".8" stroke="none"/>
+                <path d="M0 74C10 34 28 10 50 2" stroke="#fff" stroke-width="3"/>
+                <path d="M8 22c-4 0-5-6 0-7 1-5 9-5 10 0 5 0 5 7 0 7z M76 40c-3 0-4-5 0-6 1-4 8-4 9 0 4 0 4 6 0 6z" fill="#fff" stroke="var(--tinta)" stroke-width="1.4"/>
+                <path transform="translate(86 18) scale(0.9)" d="M0 -2C-4 -6 -9 0 0 7C9 0 4 -6 0 -2Z" fill="var(--rosa)" stroke="none"/><path transform="translate(12 48) scale(0.6)" d="M0 -2C-4 -6 -9 0 0 7C9 0 4 -6 0 -2Z" fill="var(--rosa)" stroke="none"/><path transform="translate(90 70) scale(0.5)" d="M0 -2C-4 -6 -9 0 0 7C9 0 4 -6 0 -2Z" fill="var(--rojo)" stroke="none"/>
+                <path transform="translate(16 76) scale(0.9)" d="M0 -5L1.5 -1.5L5 0L1.5 1.5L0 5L-1.5 1.5L-5 0L-1.5 -1.5Z" fill="var(--marcador)" stroke="var(--tinta)" stroke-width="1"/><path transform="translate(84 48) scale(0.7)" d="M0 -5L1.5 -1.5L5 0L1.5 1.5L0 5L-1.5 1.5L-5 0L-1.5 -1.5Z" fill="var(--marcador)" stroke="var(--tinta)" stroke-width="1"/>
+                <!-- pelo de atrás -->
+                <path d="M20 56C16 30 32 12 50 12C68 12 84 30 80 56L86 108L14 108Z" fill="#8a5a44" fill-opacity=".85"/>
+                <!-- hombros y cuello -->
+                <path d="M8 120C10 100 28 90 50 90C72 90 90 100 92 120Z" fill="#ffd9c2"/>
+                <!-- cabeza gordita -->
+                <ellipse cx="50" cy="54" rx="27" ry="25" fill="#ffd9c2"/>
+                <!-- pelo con raya y mechones -->
+                <path d="M50 20C30 22 22 40 24 62L20 98L30 98L31 60C33 44 42 33 50 30C58 33 67 44 69 60L70 98L80 98L76 62C78 40 70 22 50 20Z" fill="#8a5a44" fill-opacity=".9"/>
+                <path d="M28 46C26 66 27 84 23 96M66 46C69 66 68 84 73 96" stroke="#3b2418" stroke-width="1.2"/>
+                <!-- cejas -->
+                <path d="M34 46C37 43 42 43 45 45M55 45C58 43 63 43 66 46" stroke-width="3.2"/>
+                <!-- ojazos brillantes -->
+                <ellipse cx="40" cy="57" rx="4.6" ry="6" fill="var(--tinta)"/><ellipse cx="60" cy="57" rx="4.6" ry="6" fill="var(--tinta)"/>
+                <circle cx="41.8" cy="54.5" r="1.9" fill="#fff" stroke="none"/><circle cx="61.8" cy="54.5" r="1.9" fill="#fff" stroke="none"/>
+                <circle cx="38.5" cy="60" r=".9" fill="#fff" stroke="none"/><circle cx="58.5" cy="60" r=".9" fill="#fff" stroke="none"/>
+                <path d="M35 53L32 51M36 51L34 48M65 53L68 51M64 51L66 48" stroke-width="1.5"/>
+                <!-- mofletes, pecas, naricita y sonrisa -->
+                <ellipse cx="33" cy="67" rx="5" ry="3.2" fill="var(--rosa)" fill-opacity=".8" stroke="none"/><ellipse cx="67" cy="67" rx="5" ry="3.2" fill="var(--rosa)" fill-opacity=".8" stroke="none"/>
+                
+                <path d="M49 64Q50 65.5 52 64" stroke-width="1.5"/>
+                <path d="M44 70Q50 77 57 69" stroke="var(--rojo)" stroke-width="2.4"/>
+                <!-- aro dorado, collares y medalla -->
+                <circle cx="23" cy="70" r="4.5" stroke="#d9a21f" stroke-width="2.6"/>
+                <path d="M40 90Q50 98 60 90" stroke="#d9a21f" stroke-width="1.5"/>
+                <path d="M37 92Q50 114 63 92" stroke="#d9a21f" stroke-width="1.5"/>
+                <circle cx="50" cy="106" r="5.5" fill="var(--marcador)" stroke="#d9a21f" stroke-width="1.8"/>
+                <path d="M50 103.5l1.1 2.2 2.4.3-1.8 1.7.5 2.4-2.2-1.2-2.2 1.2.5-2.4-1.8-1.7 2.4-.3z" fill="#d9a21f" stroke="none"/>
+              </svg>
+            </div>
+            <div class="datos">
+              <div><b>1.</b>MORA LOZANO</div>
+              <div><b>2.</b><span class="marca">Mar</span> <span style="color:var(--rosa)">♡</span></div>
+              <div><b>3.</b>Valencia</div>
+              <div class="fila"><span><b>4a.</b>30/10/2026</span><span><b>4b.</b>30/10/2036</span></div>
+              <div><b>5.</b>12345678-Z</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cara dorso">
+        <div class="dibujo">
+          <div class="cat">
+            <div class="letra">B</div>
+            <div><b style="color:var(--rojo)">9.</b> Categoría<br>coche normal</div>
+            <svg viewBox="0 0 120 52" fill="none" stroke="var(--tinta)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 38V29Q6 24 12 23L30 20L42 8Q44 6 48 6H78Q82 6 84 9L94 20L108 23Q114 24 114 29V38Z" fill="var(--marcador)" fill-opacity=".55"/>
+              <path d="M36 20L46 10H62V20ZM68 20V10H78L87 20Z"/>
+              <circle cx="32" cy="40" r="8" fill="var(--papel)"/><circle cx="90" cy="40" r="8" fill="var(--papel)"/>
+            </svg>
+          </div>
+          <div class="obs"><b>12.</b>Conducir con calma, mirar los espejos y no pitar sin motivo.</div>
+          <div class="pie">
+            <div class="firma">
+              <svg viewBox="0 0 90 30" fill="none" stroke="var(--tinta)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22C10 2 16 26 24 12s8 12 16-2 12 8 22-4 8 10 22 0"/></svg>
+              7. Firma
+            </div>
+            <svg class="holo" viewBox="0 0 60 60" fill="none" stroke="var(--rojo)" stroke-width="2" stroke-linecap="round">
+              <circle cx="30" cy="30" r="26" fill="var(--marcador)" fill-opacity=".6"/>
+              <path d="M12 40L48 20M14 24L46 44M30 6V54"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="regalo" id="regalo">
+      <div class="sombra"></div>
+      <div class="wrap entero"><div class="trozo"></div></div>
+      <div class="wrap tD"><div class="trozo"></div></div>
+      <div class="wrap tA"><div class="trozo"></div></div>
+      <div class="wrap tB"><div class="trozo"></div></div>
+      <div class="wrap tC"><div class="trozo"></div></div>
+      <div class="lazo">
+        <svg viewBox="0 0 80 60" fill="var(--marcador)" stroke="var(--tinta)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M38 34L24 57L33 52L38 59L42 40Z M42 34L56 57L47 52L42 59L38 40Z"/>
+          <path d="M40 30C28 4 4 6 8 24C10 38 30 36 40 30Z"/>
+          <path d="M40 30C52 4 76 6 72 24C70 38 50 36 40 30Z"/>
+          <path d="M16 20C20 14 26 14 32 22M64 20C60 14 54 14 48 22" fill="none" stroke-width="1.6"/>
+          <ellipse cx="40" cy="30" rx="6.5" ry="7.5"/>
+        </svg>
+      </div>
+    </div>
+    </div>
+  </div>
+  <p class="ayuda" id="ayuda">Toca el regalo para abrirlo ♡</p>
+
+<script>
+  // Círculo de estrellitas dibujadas a mano
+  const svgEst = document.getElementById('estrellas');
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6, x = Math.cos(a) * 16, y = Math.sin(a) * 16;
+    svgEst.insertAdjacentHTML('afterbegin',
+      `<path d="M${x-2} ${y}h4M${x} ${y-2}v4M${x-1.4} ${y-1.4}l2.8 2.8M${x+1.4} ${y-1.4}l-2.8 2.8"/>`);
+  }
+
+  const escena = document.getElementById('escena');
+  const inclina = document.getElementById('inclina');
+  const tarjeta = document.getElementById('tarjeta');
+  document.querySelectorAll('.dibujo').forEach(d => d.insertAdjacentHTML('beforeend', '<div class="reflejo"></div>'));
+
+  const reducir = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reducir) tarjeta.style.transition = 'none';
+  const MAX = reducir ? 0 : 22;          // inclinación máxima en grados
+
+  // valores actuales y objetivos (se suavizan en cada fotograma)
+  let rx = 0, ry = 0, esc = 1, gx = 50, gy = 50, go = 0;
+  let tx = 0, ty = 0, tesc = 1, tgx = 50, tgy = 50, tgo = 0;
+  let giro = 0, pulsado = false, movido = false, inicioX = 0, inicioY = 0, inicioT = 0;
+
+  function apuntar(e) {
+    const r = escena.getBoundingClientRect();
+    const lim = v => Math.max(-.6, Math.min(.6, v));
+    const nx = lim((e.clientX - r.left) / r.width - .5);
+    const ny = lim((e.clientY - r.top) / r.height - .5);
+    ty = nx * 2 * MAX;  tx = -ny * 2 * MAX;
+    tgx = (nx + .5) * 100;  tgy = (ny + .5) * 100;  tgo = 1;
+  }
+  function reposo() { tx = ty = 0; tgx = tgy = 50; tgo = 0; tesc = 1; }
+  // ---- Regalo ----
+  const SOLO_PRIMERA_VEZ = false;   // false: el regalo sale siempre · true: solo la primera vez en cada dispositivo
+  const CLAVE = 'carnet-mar-regalo-abierto';
+  const regalo = document.getElementById('regalo');
+  const ayuda = document.getElementById('ayuda');
+  const TEXTO_NORMAL = 'Arrastra para inclinarlo · toca para darle la vuelta';
+  let abierto = false;
+
+  let yaVisto = false;
+  try { yaVisto = localStorage.getItem(CLAVE) === '1'; } catch (e) {}
+  if (SOLO_PRIMERA_VEZ && yaVisto) { regalo.remove(); abierto = true; ayuda.textContent = TEXTO_NORMAL; }
+
+  function abrir() {
+    abierto = true;
+    regalo.classList.add('abierto');
+    tesc = 1.08; setTimeout(() => { tesc = 1; }, 180);          // saltito al abrirse
+    ayuda.textContent = TEXTO_NORMAL;
+    if (SOLO_PRIMERA_VEZ) { try { localStorage.setItem(CLAVE, '1'); } catch (e) {} }
+    setTimeout(() => regalo.remove(), 1600);
+  }
+  function girar() {
+    if (!abierto) { abrir(); return; }
+    giro += 180; tarjeta.style.transform = `rotateY(${giro}deg)`;
+  }
+
+  escena.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') apuntar(e); });
+  escena.addEventListener('pointermove', e => {
+    if (e.pointerType === 'mouse' || pulsado) apuntar(e);
+    if (pulsado && Math.hypot(e.clientX - inicioX, e.clientY - inicioY) > 8) movido = true;
+  });
+  escena.addEventListener('pointerleave', () => { if (!pulsado) reposo(); });
+  escena.addEventListener('pointerdown', e => {
+    pulsado = true; movido = false; tesc = .97;
+    inicioX = e.clientX; inicioY = e.clientY; inicioT = Date.now();
+    escena.setPointerCapture(e.pointerId);
+    apuntar(e);
+  });
+  escena.addEventListener('pointerup', e => {
+    pulsado = false; tesc = 1;
+    if (!movido && Date.now() - inicioT < 600) girar();      // un toque o clic = dar la vuelta
+    const r = escena.getBoundingClientRect();
+    const dentro = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (e.pointerType !== 'mouse' || !dentro) reposo();
+  });
+  escena.addEventListener('pointercancel', () => { pulsado = false; reposo(); });
+  escena.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); girar(); }
+  });
+
+  function bucle() {
+    rx += (tx - rx) * .12;   ry += (ty - ry) * .12;   esc += (tesc - esc) * .15;
+    gx += (tgx - gx) * .2;   gy += (tgy - gy) * .2;   go  += (tgo - go) * .12;
+    inclina.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) scale(${esc})`;
+    escena.style.setProperty('--gx', gx + '%');
+    escena.style.setProperty('--gy', gy + '%');
+    escena.style.setProperty('--go', go);
+    escena.style.setProperty('--bp', gx + '%');
+    requestAnimationFrame(bucle);
+  }
+  bucle();
+</script>
+<script>
+  // Permite instalar la app y que funcione sin conexión
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>
